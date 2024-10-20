@@ -216,8 +216,6 @@ async def set_channel(ctx, channel_type: str, channel_id: int):
     else:
         await ctx.send(access_message)
 
-
-#TODO: verify that discord_tv_channel is OK before allowing !watch
 @discord_bot.command()
 async def watch(ctx, channel_name: str):
     """
@@ -228,6 +226,11 @@ async def watch(ctx, channel_name: str):
         channel_name (str): The name of the IRC channel to watch (e.g., #channelname or channelname).
     """
     global watching, irc_watch_channel
+
+    tv_access, tv_message = check_channel_access(discord_tv_channel)
+    if tv_access == False:
+        await ctx.send(f"Cannot !watch because of a problem with the the Discord TV channel:\n{tv_message}\nUse `!set_channel [channel_id]` to fix this.")
+        return
 
     if not channel_name.startswith("#"):
         normalized_channel = f"#{channel_name}"
@@ -247,8 +250,6 @@ async def watch(ctx, channel_name: str):
         await ctx.send("IRC bot is not connected to the server.")
         print("Failed to start watching: IRC bot not connected.")
 
-
-#TODO: verify that discord_fc_channel is OK before allowing !fastcap
 @discord_bot.command()
 async def fastcap(ctx, channel_name: str):
     """
@@ -259,6 +260,11 @@ async def fastcap(ctx, channel_name: str):
         channel_name (str): The name of the IRC channel to watch for fastcappin' (e.g., #channelname or channelname).
     """
     global fast_tracking, irc_fc_channel
+
+    fc_access, fc_message = check_channel_access(discord_fc_channel)
+    if fc_access == False:
+        await ctx.send(f"Cannot !watch because of a problem with the the Discord TV channel:\n{fc_message}\nUse `!set_channel [channel_id]` to fix this.")
+        return
 
     if not channel_name.startswith("#"):
         normalized_channel = f"#{channel_name}"

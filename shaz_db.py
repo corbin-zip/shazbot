@@ -437,16 +437,20 @@ def extract_time_remaining(line):
         return minutes * 60 + seconds
     return None
 
-def parse_single_cap(conn, line, log_file="caplog.log"):
+def parse_single_cap(conn, line, log_file="unmatched_cap_events.log"):
     # TODO: instead of "fixing" the line, i believe we can just fix the regex's to match up to 2 spaces
     fixed_line = re.sub(r"(\[\d{2}:\d{2}\])\s{2}", r"\1 ", line)
     current_time = extract_time_remaining(fixed_line)
-    # print(f"DEBUG: parse_single_cap says current_time is {current_time}")
     event_type, data = parse_line(fixed_line)
     if event_type and current_time is not None:
         # print("DEBUG: calling handle_cap_event...")
         cap_update = handle_cap_event(conn, event_type, data, current_time)
         return cap_update
+    else:
+        if re.match(r"^\[\d{2}:\d{2}\]", line):
+            with open(log_file, "a") as file:
+                file.write(f"{line}\n")
+
     return None
 
 
@@ -618,7 +622,7 @@ def record_cap_time(conn, player_name, map_name, flag_team, cap_time):
     conn.commit()
     return return_string
 
-def parse_single_stat(conn, line, log_file="unmatched_events.log"):
+def parse_single_stat(conn, line, log_file="unmatched_stat_events.log"):
     # if there are 2 spaces between the time and the line, remove 1 of them
     # TODO: maybe remove this and just fix the regex's instead :)
     fixed_line = re.sub(r"(\[\d{2}:\d{2}\])\s{2}", r"\1 ", line)
@@ -626,15 +630,10 @@ def parse_single_stat(conn, line, log_file="unmatched_events.log"):
     event_type, data = parse_line(fixed_line)
     if event_type:
         handle_event(conn, event_type, data)
-    # TODO: reimplement the below. note that "score" messages should be matched now so the logic
-    #       can be adjusted accordingly.
-    # temporarily commenting this out -- 
-    # else:
-    #     # check if the line has a timestamp & does not contain the word 'score'
-    #     # if so, log it to check on later
-    #     if re.match(r"^\[\d{2}:\d{2}\]", line) and "score" not in line.lower():
-    #         with open(log_file, "a") as file:
-    #             file.write(f"{line}\n")  # Append unmatched line to log file
+    else:
+        if re.match(r"^\[\d{2}:\d{2}\]", line):
+            with open(log_file, "a") as file:
+                file.write(f"{line}\n")
 
 def whois(conn, player_name):
     cursor = conn.cursor()

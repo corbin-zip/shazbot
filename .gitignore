@@ -1,6 +1,7 @@
 .env
 game_log.db
-unmatched_events.log
+unmatched_cap_events.log
+unmatched_stat_events.log
 sample_logs/
 old_dbs/
 __pycache__/

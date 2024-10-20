@@ -143,8 +143,12 @@ class MyIRCBot(pydle.Client):
 async def on_ready():
     """Event handler for when the bot successfully connects to Discord."""
     print(f'Logged in as {discord_bot.user}')
-    #TODO: maybe check if discord_tv_channel & discord_fc_channel are OK
-    #      and if not, just throw a warning to the user
+
+    # verify access to both fc & tv channels; print debug error if there's a problem
+    fc_access, fc_message = check_channel_access(discord_fc_channel)
+    tv_access, tv_message = check_channel_access(discord_tv_channel)
+    print(f"Fastcap channel ({discord_fc_channel}): {fc_message}")
+    print(f"TV channel ({discord_tv_channel}): {tv_message}")
 
 # TODO: implement tracking & untracking (rather than misusing !watch :))
 @discord_bot.command()
@@ -169,22 +173,35 @@ async def list_channels(ctx):
     else:
         await ctx.send("IRC bot is not connected to the server.")
 
-@discord_bot.command()
-async def set_channel(ctx, channel_type: str, channel_id: int):
-    global discord_tv_channel, discord_fc_channel
-
+def check_channel_access(channel_id: int) -> tuple[bool, str]:
     try:
         # Try to fetch the channel to verify bot access
         channel = discord_bot.get_channel(channel_id)
 
         if channel is None:
-            raise ValueError("Invalid channel ID")
+            return False, "Invalid channel ID"
+
+        if channel.type != discord.ChannelType.text:
+            print(f"channel #{channel.name} ({channel_id}) listed as type {channel.type} rather than text channel; unable to send messages to it")
+            return False, f"Channel #{channel.name} ({channel_id}) isn't a text channel, so the bot cannot send messages to it"
 
         # Check if the bot has permission to send messages in the channel
-        permissions = channel.permissions_for(ctx.guild.me)
+        permissions = channel.permissions_for(channel.guild.me)
         if not permissions.send_messages:
-            raise discord.Forbidden("Bot lacks permission to send messages in this channel")
+            return False, f"Bot lacks permission to send messages in channel #{channel.name} ({channel_id})"
+        return True, f"Channel #{channel.name} ({channel_id}) is valid and accessible by the Discord bot"
 
+    except discord.Forbidden:
+        return False, "The bot does not have permission to send messages in that channel."
+    except Exception as e:
+        return False, f"An error ocurred: {str(e)}"
+
+@discord_bot.command()
+async def set_channel(ctx, channel_type: str, channel_id: int):
+    global discord_tv_channel, discord_fc_channel
+
+    channel_access, access_message = check_channel_access(channel_id)
+    if (channel_access):
         # Handle channel type
         if channel_type.lower() == "tv":
             discord_tv_channel = channel_id
@@ -196,13 +213,9 @@ async def set_channel(ctx, channel_type: str, channel_id: int):
             print(f"Fastcap Discord channel set to {channel_id}")
         else:
             await ctx.send(f"Unknown channel type: {channel_type}")
+    else:
+        await ctx.send(access_message)
 
-    except discord.Forbidden:
-        await ctx.send("The bot does not have permission to send messages in that channel.")
-    except ValueError:
-        await ctx.send(f"Invalid channel ID: {channel_id}")
-    except Exception as e:
-        await ctx.send(f"An error occurred: {str(e)}")
 
 #TODO: verify that discord_tv_channel is OK before allowing !watch
 @discord_bot.command()

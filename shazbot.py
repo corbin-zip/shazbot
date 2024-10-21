@@ -243,6 +243,8 @@ async def watch(ctx, channel_name: str):
         # Set the global variables for watching state and channel
         watching = True
         irc_watch_channel = normalized_channel
+        #BUG: if the bot is already in the channel (eg: fastcapping), it won't
+        #     give any indication that the !watch command was successful
         await irc_bot.join(irc_watch_channel)
         await ctx.send(f"Now watching IRC channel: {irc_watch_channel}")
         print(f"Started watching IRC channel: {irc_watch_channel}")
@@ -276,6 +278,9 @@ async def fastcap(ctx, channel_name: str):
 
         fast_tracking = True
         irc_fc_channel = normalized_channel
+        #BUG: if the bot is already in the channel (eg: watching), it won't
+        #     give any indication that the !fastcap command was successful
+
         await irc_bot.join(irc_fc_channel)
         await ctx.send(f"Now fastcappin' in IRC channel: {irc_fc_channel}")
         print(f"Started fastcappin' in IRC channel: {irc_fc_channel}")

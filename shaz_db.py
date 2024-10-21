@@ -132,8 +132,17 @@ patterns = {
     # score lists
     "score_list": r"^\[(?P<time>\d{2}:\d{2})\] +Scores -- Storm:(?P<storm_score>\d+) -- Inferno:(?P<inferno_score>\d+) -- (?P<map_name>.+)",
 
+    # throw away
+    "flags_secure": r"^\[\d{2}:\d{2}\] Both team's flags are secure\.",
+    "team_scores": r"^\[\d{2}:\d{2}\] Team (?P<team>\w+) scores\!",
+    "switched_team": r"^\[\d{2}:\d{2}\] (?P<player>.+?) switched to team (?P<team_name>.+?)\.",
+    #BUG: these 2 don't match:
+    "divider_line": r"^\[\d{2}:\d{2}\] {2,}[-]{32} {3,}[-]{32}$",
+    "score_header": r"^\[\d{2}:\d{2}\] {2,}Warrior Name {5,}Score Kills TKs {3,}Warrior Name {5,}Score Kills TKs$",
+
     # "hi" "oops" "shazbot!" etc - this matches all of them
     "player_message": r"^\[\d{2}:\d{2}\] (?P<player>.+?):\s+\"(?P<message>.+?)\""
+    
 }
 
 # Parse a single line of text using the predefined patterns

@@ -25,7 +25,9 @@ patterns = {
     "disconnected": r"^\[\d{2}:\d{2}\] (?P<player>.+?) disconnected\.",
     "joined_team": r"^\[\d{2}:\d{2}\] (?P<player>.+?) joined team (?P<team_name>.+?)\.",
     "server_moved": r"^\[\d{2}:\d{2}\] SERVER moved (?P<player>.+?) to (?P<team_name>.+?)\.",
-    # need to add "player has RECONNECTED"
+    "reconnected": r"^\[\d{2}:\d{2}\] (?P<player>.+?) has RECONNECTED\. +Score:(?P<score>\d+) +Kills:(?P<kills>\d+)$",
+    # BUG: verify reconnected; does it work with/without scores/kills?
+    #      it's probably broken in the same way that disconnected is
 
     # random
     "flare_assist": r"^\[\d{2}:\d{2}\] (?P<player>.+?) provided a flare assist\.",

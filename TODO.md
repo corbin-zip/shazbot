@@ -1,10 +1,6 @@
 ## bugs, todo's, etc
 
 ### bugs
-* implement permissions!!!!
-    - should have a central admin and individual "operators"
-    - perhaps should implement granular control over which functions "ops" have access to?
-    - marking this as a "bug" because it is essentially a massive security risk if any player can essentially [Majin Buu](https://www.youtube.com/watch?v=v3W2Y2NKIhE) (or [Walter White](https://old.reddit.com/r/breakingbad/comments/2dik2v/spoilera_little_detail_i_noticed_in_season_5/)) absorb stats from others
 * `!merge` is broken
     - it hasn't been updated to deal with fastcap scores yet, so it'll simply sum them together instead of saving the lower number
 * fix "IRC bot already in the IRC channel" bug
@@ -80,6 +76,11 @@
 * implement a proper "debug" mode
     - rather than having debug print statements all over that are commented/not commented out, just write a `dprint()` function or something that checks for a `SHAZ_DEBUG` env variable
 * declare types wherever possible
+* implement more sophisticated permissions checking
+    - currently have a central admin defined by discord user ID which is at least *functional*
+    - central admin can appoint operators with similar permissions but currently these operators are not saved anywhere
+    - perhaps should implement granular control over which functions "ops" have access to?
+    - (players can no longer [Majin Buu](https://www.youtube.com/watch?v=v3W2Y2NKIhE) (or [Walter White](https://old.reddit.com/r/breakingbad/comments/2dik2v/spoilera_little_detail_i_noticed_in_season_5/)) absorb stats from others so this is no longer marked as a bug :)
 
 ### to be considered
 * think about tracking wins & losses

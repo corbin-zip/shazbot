@@ -1,7 +1,5 @@
-# Danger!
-Currently there is NO permissions checking. Anyone in any server that the Discord bot is connected to can send it commands!
-
 # IYKYK
+
 TODO: Write a summary here that makes to people outside of the [TAA Discord](https://discord.com/tribesaa)
 
 # How to
@@ -19,6 +17,7 @@ export SHAZ_IRC_NICK="Shazbot"
 export SHAZ_IRC_CHANNEL="#shazready"
 export SHAZ_DEFAULT_DISCORD_TV="discord_channel_id"
 export SHAZ_DEFAULT_DISCORD_FASTCAP="discord_channel_id"
+export SHAZ_DISCORD_ADMIN_ID="your_discord_uid_here"
 ```
 You can get channel IDs from Discord by enabling dev mode in your client and right-clicking on a channel and selecting "get channel ID"
 

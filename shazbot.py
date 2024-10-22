@@ -26,6 +26,9 @@ intents = discord.Intents.default()
 intents.message_content = True
 discord_bot = commands.Bot(command_prefix='!', intents=intents)
 
+ADMIN_USERS = { int(os.getenv("SHAZ_DISCORD_ADMIN_ID")) }
+Operators = set()
+
 # Global variable to hold IRC bot reference
 irc_bot = None
 irc_response = ""  # Variable to store IRC responses
@@ -150,13 +153,31 @@ async def on_ready():
     print(f"Fastcap channel ({discord_fc_channel}): {fc_message}")
     print(f"TV channel ({discord_tv_channel}): {tv_message}")
 
-# TODO: implement tracking & untracking (rather than misusing !watch :))
+def is_admin_or_operator():
+    async def predicate(ctx):
+        return ctx.author.id in ADMIN_USERS or ctx.author.id in Operators
+    return commands.check(predicate)
+
+@discord_bot.command(name='id')
+@is_admin_or_operator()
+async def get_discord_id(ctx):
+    await ctx.send(f"Your user ID is: {ctx.author.id}")
+
+@discord_bot.command(name='op')
+async def add_operator(ctx, user_id: int):
+    if ctx.author.id in ADMIN_USERS:
+        Operators.add(user_id)
+        await ctx.send(f"User with ID {user_id} has been added as an operator.")
+    else:
+        await ctx.send("You don't have permission to add operators")
+
 @discord_bot.command()
 async def hello(ctx):
     """Responds with 'Hello!' when the command !hello is used."""
     await ctx.send('Hello!')
 
 @discord_bot.command(name='list')
+@is_admin_or_operator()
 async def list_channels(ctx):
     """Sends the IRC LIST command and mirrors the channel list output to the Discord channel."""
     global irc_response
@@ -197,6 +218,7 @@ def check_channel_access(channel_id: int) -> tuple[bool, str]:
         return False, f"An error ocurred: {str(e)}"
 
 @discord_bot.command()
+@is_admin_or_operator()
 async def set_channel(ctx, channel_type: str, channel_id: int):
     global discord_tv_channel, discord_fc_channel
 
@@ -216,7 +238,9 @@ async def set_channel(ctx, channel_type: str, channel_id: int):
     else:
         await ctx.send(access_message)
 
+# TODO: implement tracking & untracking (rather than misusing !watch :))
 @discord_bot.command()
+@is_admin_or_operator()
 async def watch(ctx, channel_name: str):
     """
     Enables watching for a specified IRC channel.
@@ -253,6 +277,7 @@ async def watch(ctx, channel_name: str):
         print("Failed to start watching: IRC bot not connected.")
 
 @discord_bot.command()
+@is_admin_or_operator()
 async def fastcap(ctx, channel_name: str):
     """
     Sets an IRC channel to be the fastcap channel
@@ -289,6 +314,7 @@ async def fastcap(ctx, channel_name: str):
         print("Failed to start watching: IRC bot not connected.")
 
 @discord_bot.command()
+@is_admin_or_operator()
 async def unwatch(ctx):
     """
     Disables watching for any IRC channel.
@@ -304,6 +330,7 @@ async def unwatch(ctx):
     print("Stopped watching IRC channels.")
 
 @discord_bot.command(name='close')
+@is_admin_or_operator()
 async def close_db(ctx):
     global db_conn
     db_conn.close()
@@ -311,6 +338,7 @@ async def close_db(ctx):
 
 #BUG TODO: this currently tramples the player's fastcap scores
 @discord_bot.command(name='merge')
+@is_admin_or_operator()
 async def merge_players(ctx, source_id: int, target_id: int):
     global db_conn
     source_name = shaz_db.get_player_name_by_id(db_conn, source_id)
@@ -322,6 +350,7 @@ async def merge_players(ctx, source_id: int, target_id: int):
         await ctx.send(f"Merged player ID {source_id} ({source_name}) into ID {target_id} ({target_name}).")
 
 @discord_bot.command(name='whois')
+@is_admin_or_operator()
 async def whois_player(ctx, player_name: str):
     global db_conn
     player_id = shaz_db.whois(db_conn, player_name)

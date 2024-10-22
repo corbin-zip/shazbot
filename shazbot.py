@@ -11,15 +11,13 @@ import os
 
 load_dotenv()
 
-IRC_COLOR_CODE_REGEX = re.compile(r'\x03(\d{1,2}(,\d{1,2})?)?|\x02|\x1F|\x16|\x0F')
-
 # Configuration
-irc_server = os.getenv("SHAZ_IRC_SERVER", None)
-irc_port = int(os.getenv("SHAZ_IRC_PORT", 6697))
-irc_channel = os.getenv("SHAZ_IRC_CHANNEL", "#READY")
-irc_nick = os.getenv("SHAZ_IRC_NICK", "Shazbot")
+IRC_SERVER = os.getenv("SHAZ_IRC_SERVER", None)
+IRC_PORT = int(os.getenv("SHAZ_IRC_PORT", 6697))
+IRC_CHANNEL = os.getenv("SHAZ_IRC_CHANNEL", "#READY")
+IRC_NICK = os.getenv("SHAZ_IRC_NICK", "Shazbot")
 
-discord_token = os.getenv("SHAZ_DISCORD_TOKEN")
+DISCORD_TOKEN = os.getenv("SHAZ_DISCORD_TOKEN")
 
 # Setting up the Discord bot with the necessary intents
 intents = discord.Intents.default()
@@ -27,26 +25,25 @@ intents.message_content = True
 discord_bot = commands.Bot(command_prefix='!', intents=intents)
 
 ADMIN_USERS = { int(os.getenv("SHAZ_DISCORD_ADMIN_ID")) }
-Operators = set()
+operators = set()
 
 # Global variable to hold IRC bot reference
 irc_bot = None
 irc_response = ""  # Variable to store IRC responses
 
 ## watching ...
-watching = False
+currently_watching = False
 irc_watch_channel = None
 discord_tv_channel = int(os.getenv("SHAZ_DEFAULT_DISCORD_TV"))
 
 ##fastcap
-fast_tracking = False
-irc_fc_channel = None
-discord_fc_channel = int(os.getenv("SHAZ_DEFAULT_DISCORD_FASTCAP"))
+currently_fastcapping = False
+irc_fastcap_channel = None
+discord_fastcap_channel = int(os.getenv("SHAZ_DEFAULT_DISCORD_FASTCAP"))
 
 # db
 db_conn = shaz_db.initialize_database()
 db_lock = asyncio.Lock()
-
 
 # IRC ------------------------------------------------------------------------------------------
 class MyIRCBot(pydle.Client):
@@ -58,7 +55,7 @@ class MyIRCBot(pydle.Client):
     async def on_connect(self):
         print("Connected to IRC server!")
         #TODO: rejoin any channels we need to be in, like watch channels or stat channels
-        await self.join(irc_channel)
+        await self.join(IRC_CHANNEL)
 
     async def get_channel_list(self) -> list:
         """Send the LIST command to the IRC server and collect the list of channels."""
@@ -114,18 +111,18 @@ class MyIRCBot(pydle.Client):
         if message.strip().lower() == "!hello":
             await self.message(target, f"Hello, {source}!")
 
-        global fast_tracking, irc_fc_channel, discord_fc_channel
-        if fast_tracking and target == irc_fc_channel:
+        global currently_fastcapping, irc_fastcap_channel, discord_fastcap_channel
+        if currently_fastcapping and target == irc_fastcap_channel:
             # print("DEBUG: calling parse_single_cap...")
             async with db_lock:
                 loop = asyncio.get_event_loop()
                 fc_result = await loop.run_in_executor(None, shaz_db.parse_single_cap, db_conn, cleaned_message)
                 if fc_result:
-                    await send_message_to_channel(discord_fc_channel, "`" + fc_result + "`")
+                    await send_message_to_channel(discord_fastcap_channel, "`" + fc_result + "`")
 
-        global watching, irc_watch_channel, discord_tv_channel
+        global currently_watching, irc_watch_channel, discord_tv_channel
 
-        if watching and target == irc_watch_channel:
+        if currently_watching and target == irc_watch_channel:
             # (alternatively could refactor shaz_db to be async as well)
             async with db_lock:
                 await send_message_to_channel(discord_tv_channel, "`" + cleaned_message + "`")
@@ -148,14 +145,14 @@ async def on_ready():
     print(f'Logged in as {discord_bot.user}')
 
     # verify access to both fc & tv channels; print debug error if there's a problem
-    fc_access, fc_message = check_channel_access(discord_fc_channel)
+    fc_access, fc_message = check_channel_access(discord_fastcap_channel)
     tv_access, tv_message = check_channel_access(discord_tv_channel)
-    print(f"Fastcap channel ({discord_fc_channel}): {fc_message}")
+    print(f"Fastcap channel ({discord_fastcap_channel}): {fc_message}")
     print(f"TV channel ({discord_tv_channel}): {tv_message}")
 
 def is_admin_or_operator():
     async def predicate(ctx):
-        return ctx.author.id in ADMIN_USERS or ctx.author.id in Operators
+        return ctx.author.id in ADMIN_USERS or ctx.author.id in operators
     return commands.check(predicate)
 
 @discord_bot.command(name='id')
@@ -166,7 +163,7 @@ async def get_discord_id(ctx):
 @discord_bot.command(name='op')
 async def add_operator(ctx, user_id: int):
     if ctx.author.id in ADMIN_USERS:
-        Operators.add(user_id)
+        operators.add(user_id)
         await ctx.send(f"User with ID {user_id} has been added as an operator.")
     else:
         await ctx.send("You don't have permission to add operators")
@@ -220,7 +217,7 @@ def check_channel_access(channel_id: int) -> tuple[bool, str]:
 @discord_bot.command()
 @is_admin_or_operator()
 async def set_channel(ctx, channel_type: str, channel_id: int):
-    global discord_tv_channel, discord_fc_channel
+    global discord_tv_channel, discord_fastcap_channel
 
     channel_access, access_message = check_channel_access(channel_id)
     if (channel_access):
@@ -230,7 +227,7 @@ async def set_channel(ctx, channel_type: str, channel_id: int):
             await ctx.send(f"TV Discord channel set to {channel_id}")
             print(f"TV Discord channel set to {channel_id}")
         elif channel_type.lower() == "fastcap":
-            discord_fc_channel = channel_id
+            discord_fastcap_channel = channel_id
             await ctx.send(f"Fastcap Discord channel set to {channel_id}")
             print(f"Fastcap Discord channel set to {channel_id}")
         else:
@@ -249,7 +246,7 @@ async def watch(ctx, channel_name: str):
         ctx: The context of the command.
         channel_name (str): The name of the IRC channel to watch (e.g., #channelname or channelname).
     """
-    global watching, irc_watch_channel
+    global currently_watching, irc_watch_channel
 
     tv_access, tv_message = check_channel_access(discord_tv_channel)
     if tv_access == False:
@@ -265,7 +262,7 @@ async def watch(ctx, channel_name: str):
         print(f"let's go!")
 
         # Set the global variables for watching state and channel
-        watching = True
+        currently_watching = True
         irc_watch_channel = normalized_channel
         #BUG: if the bot is already in the channel (eg: fastcapping), it won't
         #     give any indication that the !watch command was successful
@@ -286,9 +283,9 @@ async def fastcap(ctx, channel_name: str):
         ctx: The context of the command.
         channel_name (str): The name of the IRC channel to watch for fastcappin' (e.g., #channelname or channelname).
     """
-    global fast_tracking, irc_fc_channel
+    global currently_fastcapping, irc_fastcap_channel
 
-    fc_access, fc_message = check_channel_access(discord_fc_channel)
+    fc_access, fc_message = check_channel_access(discord_fastcap_channel)
     if fc_access == False:
         await ctx.send(f"Cannot !watch because of a problem with the the Discord TV channel:\n{fc_message}\nUse `!set_channel [channel_id]` to fix this.")
         return
@@ -301,14 +298,14 @@ async def fastcap(ctx, channel_name: str):
     if irc_bot and irc_bot.connected:
         print(f"let's start fastcappin!")
 
-        fast_tracking = True
-        irc_fc_channel = normalized_channel
+        currently_fastcapping = True
+        irc_fastcap_channel = normalized_channel
         #BUG: if the bot is already in the channel (eg: watching), it won't
         #     give any indication that the !fastcap command was successful
 
-        await irc_bot.join(irc_fc_channel)
-        await ctx.send(f"Now fastcappin' in IRC channel: {irc_fc_channel}")
-        print(f"Started fastcappin' in IRC channel: {irc_fc_channel}")
+        await irc_bot.join(irc_fastcap_channel)
+        await ctx.send(f"Now fastcappin' in IRC channel: {irc_fastcap_channel}")
+        print(f"Started fastcappin' in IRC channel: {irc_fastcap_channel}")
     else:
         await ctx.send("IRC bot is not connected to the server.")
         print("Failed to start watching: IRC bot not connected.")
@@ -322,9 +319,9 @@ async def unwatch(ctx):
     Args:
         ctx: The context of the command.
     """
-    global watching, irc_watch_channel
+    global currently_watching, irc_watch_channel
 
-    watching = False
+    currently_watching = False
     irc_watch_channel = None
     await ctx.send("Stopped watching IRC channels.")
     print("Stopped watching IRC channels.")
@@ -378,17 +375,18 @@ def strip_irc_formatting(message: str) -> str:
     Returns:
         str: The cleaned message without color codes or formatting.
     """
-    cleaned_message = IRC_COLOR_CODE_REGEX.sub('', message)
+    irc_color_code_regex = re.compile(r'\x03(\d{1,2}(,\d{1,2})?)?|\x02|\x1F|\x16|\x0F')
+    cleaned_message = irc_color_code_regex.sub('', message)
     return cleaned_message
 
 
 async def main():
-    global irc_bot, irc_nick
+    global irc_bot, IRC_NICK
 
-    irc_bot = MyIRCBot(irc_nick)
-    irc_task = asyncio.create_task(irc_bot.connect(irc_server, irc_port, tls=True))
+    irc_bot = MyIRCBot(IRC_NICK)
+    irc_task = asyncio.create_task(irc_bot.connect(IRC_SERVER, IRC_PORT, tls=True))
 
-    discord_task = asyncio.create_task(discord_bot.start(discord_token))
+    discord_task = asyncio.create_task(discord_bot.start(DISCORD_TOKEN))
 
     # Wait for both the IRC and Discord bots to run concurrently
     await asyncio.gather(irc_task, discord_task)

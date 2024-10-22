@@ -70,9 +70,6 @@
     - this is a todo rather than a bug because the code actually functions fine; I just feel like it's done in a lazy way
 * check if regex workarounds in `handle_event()` are still necessary
     - now that there are regex's to match eg "An AA turret", must we check if the killer's name is "An AA turret"?
-* apply format guidelines in README.md
-    - constants are in ALL_UPPERCASE
-    - globals are in SnakeCase
 * implement a proper "debug" mode
     - rather than having debug print statements all over that are commented/not commented out, just write a `dprint()` function or something that checks for a `SHAZ_DEBUG` env variable
 * declare types wherever possible

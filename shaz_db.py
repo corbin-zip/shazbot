@@ -7,7 +7,7 @@ import sys
 # TODO: probably swap these regexes to use \s+ instead of simply " "
 #       (so it matches 1 or more spaces and therefore works with both IRC
 #       and static logs without checks elsewhere in the code)
-patterns = {
+EVENT_PATTERNS = {
     # clocks
     #BUG: matches Team Storm, Team Inferno, and Team totals.
     #     i think the former 2 are fixable, the latter may not be by regex alone
@@ -147,7 +147,7 @@ patterns = {
 
 # Parse a single line of text using the predefined patterns
 def parse_line(line):
-    for event, pattern in patterns.items():
+    for event, pattern in EVENT_PATTERNS.items():
         match = re.match(pattern, line)
         if match:
             return event, match.groupdict()

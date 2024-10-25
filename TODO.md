@@ -52,9 +52,6 @@
         - eg: adjust to UTC, and then adjust the output anytime we read data from `kills_log`?
         - or adjust to something "sane" like EST?
         - note: there does seem to be some EU players; they could be accomodated no matter what direction we chose, but maybe it makes sense to start and stick with UTC from the start & to be agnostic about time in the database?
-* consider refactoring `update_player_stat`
-    - if it's only ever going to increment a stat, then it should be named as such
-    - if it's only ever going to increment by +1, then it doesn't need a `value` argument
 * save/load the script's state
     - which IRC channels were being watched and their associated discord "TV" channels
     - which IRC channel was being tracked for fastcap
@@ -78,6 +75,8 @@
     - central admin can appoint operators with similar permissions but currently these operators are not saved anywhere
     - perhaps should implement granular control over which functions "ops" have access to?
     - (players can no longer [Majin Buu](https://www.youtube.com/watch?v=v3W2Y2NKIhE) (or [Walter White](https://old.reddit.com/r/breakingbad/comments/2dik2v/spoilera_little_detail_i_noticed_in_season_5/)) absorb stats from others so this is no longer marked as a bug :)
+* break `shazbot.py` into separate files, similar to how `shaz_db.py` was broken up
+    * would be nice to have the commands themselves in a different file for instance
 
 ### to be considered
 * think about tracking wins & losses
@@ -88,14 +87,9 @@
     - it would be really cool to say something like `!track #__SUNDAY 'Sunday Event 10-20-24'` and then when the event is over, `!untrack`, and then you could browse stats and the kill log from that specific event
     - really need to think about the best way to do this. a separate database for each event may make the most sense? maybe? but then giving totals could become cumbersome, since there are a *lot* of events throughout the year
     - there is probably a simple solution to this that I just haven't considered yet!
-* think about breaking all of the fastcap stuff into a new file
-    - are we planning on adding new game modes? if so, it may make sense to have each file as its own game mode
-    - but then, should stats be its own file, and `shaz_db.py` is merely an interface for eg the stats or fastcap game modes to talk to the db indirectly?
-    - I feel like these considerations don't matter as much right now, but may be worth considering if we add more features that touch the database
-* rename `_time` variables to be more descriptive?
-    - eg: `_time_remaining`
-    - maybe I should've just done this when I wrote it down originally, it feels dumb to put on this list lol
 * think about how `current_time` is used for fastcap stuff
     - currently it's being passed around as an argument
     - should it be pulled out of `data` via regex instead?
     - to be done correctly, I think this would mean updating all of the regex's
+* consider breaking `merge_players()` out
+    * one each for `shaz_fastcap.py` and `shaz_stats.py`

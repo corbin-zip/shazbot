@@ -6,6 +6,8 @@ from discord.ext import commands
 import pydle
 import re
 import shaz_db
+import shaz_stats
+import shaz_fastcap
 from dotenv import load_dotenv
 import os
 
@@ -42,7 +44,10 @@ irc_fastcap_channel = None
 discord_fastcap_channel = int(os.getenv("SHAZ_DEFAULT_DISCORD_FASTCAP"))
 
 # db
-db_conn = shaz_db.initialize_database()
+#TODO: consider that initialize_database() should accept either a variable number of arguments, or a list of queries to execute, to make it more modular
+#      this is a cool idea in theory, but there would be a fair amount of extra work involved in practice methinks...
+DB_NAME = os.getenv("SHAZ_DB_NAME", "game_log.db")
+shaz_db.initialize_database(player_table_init=shaz_stats.PLAYER_TABLE_INIT, kills_log_table_init=shaz_stats.KILLS_LOG_TABLE_INIT, db_name=DB_NAME)
 db_lock = asyncio.Lock()
 
 # IRC ------------------------------------------------------------------------------------------
@@ -116,7 +121,7 @@ class MyIRCBot(pydle.Client):
             # print("DEBUG: calling parse_single_cap...")
             async with db_lock:
                 loop = asyncio.get_event_loop()
-                fc_result = await loop.run_in_executor(None, shaz_db.parse_single_cap, db_conn, cleaned_message)
+                fc_result = await loop.run_in_executor(None, shaz_fastcap.parse_single_cap, cleaned_message)
                 if fc_result:
                     await send_message_to_channel(discord_fastcap_channel, "`" + fc_result + "`")
 
@@ -127,7 +132,7 @@ class MyIRCBot(pydle.Client):
             async with db_lock:
                 await send_message_to_channel(discord_tv_channel, "`" + cleaned_message + "`")
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, shaz_db.parse_single_stat, db_conn, cleaned_message)
+                await loop.run_in_executor(None, shaz_stats.parse_single_stat, cleaned_message)
             # shaz_db.parse_single_stat(db_conn, cleaned_message)
 
         # if target in track_list...
@@ -329,31 +334,28 @@ async def unwatch(ctx):
 @discord_bot.command(name='close')
 @is_admin_or_operator()
 async def close_db(ctx):
-    global db_conn
-    db_conn.close()
+    shaz_db.close_db()
     await ctx.send("Closed database connection.")
 
 #BUG TODO: this currently tramples the player's fastcap scores
 @discord_bot.command(name='merge')
 @is_admin_or_operator()
 async def merge_players(ctx, source_id: int, target_id: int):
-    global db_conn
-    source_name = shaz_db.get_player_name_by_id(db_conn, source_id)
-    target_name = shaz_db.get_player_name_by_id(db_conn, target_id)
+    source_name = shaz_db.get_player_name_by_id(source_id)
+    target_name = shaz_db.get_player_name_by_id(target_id)
     if (source_name is None) or (target_name is None):
         await ctx.send("Sorry, one of those player IDs doesn't exist")
     else:
-        shaz_db.merge_players(db_conn, source_id, target_id)
+        shaz_db.merge_players(source_id, target_id)
         await ctx.send(f"Merged player ID {source_id} ({source_name}) into ID {target_id} ({target_name}).")
 
 @discord_bot.command(name='whois')
 @is_admin_or_operator()
 async def whois_player(ctx, player_name: str):
-    global db_conn
-    player_id = shaz_db.whois(db_conn, player_name)
+    player_id = shaz_db.whois(player_name)
     response = f"No player found with a name similar to '{player_name}'."
     if player_id > 0:
-        found_name = shaz_db.get_player_name_by_id(db_conn, player_id)
+        found_name = shaz_db.get_player_name_by_id(player_id)
         response = f"Closest match is player ID {player_id} ({found_name})."
     await ctx.send(response)
 

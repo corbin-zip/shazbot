@@ -1,5 +1,11 @@
 ## changelog
 
+### 10/24/24
+* refactor; separate out stat tracking & fastcapping from db
+* `shaz_db.py` is now the only file that interfaces directly with the db
+* `shaz_fastcap.py` contains nearly all of the code required for fastcapping
+* `update_player_stat()` is now `increment_player_stat()`
+
 ### 10/22/24
 * remove style guide; changed my mind about the style
 * more consistently apply style (eg `CONSTANT_VARIABLES` and `anything_else`)

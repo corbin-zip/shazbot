@@ -1,5 +1,11 @@
 ## changelog
 
+### 10/26/24
+* refactor; pass around db_conn
+* `!watch` no longer tracks
+* add `!track` and other tracking-related commands
+* allow for tracking of multiple channels
+
 ### 10/24/24
 * refactor; separate out stat tracking & fastcapping from db
 * `shaz_db.py` is now the only file that interfaces directly with the db

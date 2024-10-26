@@ -55,8 +55,6 @@
 * save/load the script's state
     - which IRC channels were being watched and their associated discord "TV" channels
     - which IRC channel was being tracked for fastcap
-* fix tracking/untracking
-    - currently `!watch` covers both but it's not supposed to. `!watch` and `!unwatch` should be independent of `!track` and `!untrack`
 * fix regex's to account for 1 or 2 spaces after the time
     - currently there are a few places in the code where extra spaces are trimmed out, otherwise you end up with players named `' player name'`, for example
         - search for `fixed_line`

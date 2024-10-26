@@ -38,6 +38,9 @@ currently_watching = False
 irc_watch_channel = None
 discord_tv_channel = int(os.getenv("SHAZ_DEFAULT_DISCORD_TV"))
 
+## tracking ...
+track_channel_list = []
+
 ##fastcap
 currently_fastcapping = False
 irc_fastcap_channel = None
@@ -125,17 +128,19 @@ class MyIRCBot(pydle.Client):
                 if fc_result:
                     await send_message_to_channel(discord_fastcap_channel, "`" + fc_result + "`")
 
-        global currently_watching, irc_watch_channel, discord_tv_channel
+        global currently_watching, irc_watch_channel, discord_tv_channel, track_channel_list
 
-        if currently_watching and target == irc_watch_channel:
+        if target in track_channel_list:
             # (alternatively could refactor shaz_db to be async as well)
             async with db_lock:
-                await send_message_to_channel(discord_tv_channel, "`" + cleaned_message + "`")
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(None, shaz_stats.parse_single_stat, db_conn, cleaned_message)
-            # shaz_db.parse_single_stat(db_conn, cleaned_message)
-
-        # if target in track_list...
+                if currently_watching and target == irc_watch_channel:
+                    await send_message_to_channel(discord_tv_channel, "`" + cleaned_message + "`")
+        else:
+            #this is in two places because the messages will send out of order if it isn't
+            if currently_watching and target == irc_watch_channel:
+                await send_message_to_channel(discord_tv_channel, "`" + cleaned_message + "`")
 
 
 # ------------------------------------------------------------------------
@@ -240,7 +245,74 @@ async def set_channel(ctx, channel_type: str, channel_id: int):
     else:
         await ctx.send(access_message)
 
-# TODO: implement tracking & untracking (rather than misusing !watch :))
+
+@discord_bot.command()
+@is_admin_or_operator()
+async def track_list(ctx):
+    """
+    Lists all currently tracked IRC channels.
+    """
+    if not track_channel_list:
+        await ctx.send("No channels are currently being tracked.")
+    else:
+        tracked_channels = "\n".join(track_channel_list)
+        await ctx.send(f"Currently tracked channels:\n{tracked_channels}")
+
+@discord_bot.command()
+@is_admin_or_operator()
+async def stop_track(ctx, channel_name: str):
+    """
+    Stops tracking a specified IRC channel.
+    """
+    global track_channel_list
+
+    normalized_channel = f"#{channel_name.lstrip('#')}"
+
+    if normalized_channel not in track_channel_list:
+        await ctx.send(f"Channel {normalized_channel} is not being tracked.")
+        return
+
+    track_channel_list.remove(normalized_channel)
+    if irc_bot and irc_bot.connected:
+        await irc_bot.part(normalized_channel)
+        await ctx.send(f"Stopped tracking IRC channel: {normalized_channel}")
+        print(f"Stopped tracking IRC channel: {normalized_channel}")
+    else:
+        await ctx.send(f"Removed {normalized_channel} from tracking, but IRC bot is not connected.")
+        print(f"Removed {normalized_channel} from tracking, but IRC bot is not connected.")
+
+@discord_bot.command()
+@is_admin_or_operator()
+async def track(ctx, channel_name: str):
+    """
+    Enables tracking for a specified IRC channel.
+
+    Args:
+        ctx: The context of the command.
+        channel_name (str): The name of the IRC channel to track (e.g., #channelname or channelname).
+    """
+    global track_channel_list
+
+    normalized_channel = f"#{channel_name.lstrip('#')}"
+
+    if normalized_channel in track_channel_list:
+        await ctx.send(f"Already tracking IRC channel: {normalized_channel}")
+        return
+
+    if irc_bot and irc_bot.connected:
+        print(f"let's begin tracking {normalized_channel}!")
+        track_channel_list.append(normalized_channel)
+
+        #BUG: if the bot is already in the channel (eg: fastcapping), it won't
+        #     give any indication that the !track command was successful
+        await irc_bot.join(normalized_channel)
+        await ctx.send(f"Now tracking IRC channel: {normalized_channel}")
+        print(f"Started tracking IRC channel: {normalized_channel}")
+    else:
+        await ctx.send("IRC bot is not connected to the server.")
+        print("Failed to start watching: IRC bot not connected.")
+
+
 @discord_bot.command()
 @is_admin_or_operator()
 async def watch(ctx, channel_name: str):
@@ -307,7 +379,6 @@ async def fastcap(ctx, channel_name: str):
         irc_fastcap_channel = normalized_channel
         #BUG: if the bot is already in the channel (eg: watching), it won't
         #     give any indication that the !fastcap command was successful
-
         await irc_bot.join(irc_fastcap_channel)
         await ctx.send(f"Now fastcappin' in IRC channel: {irc_fastcap_channel}")
         print(f"Started fastcappin' in IRC channel: {irc_fastcap_channel}")

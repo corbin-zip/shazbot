@@ -2,11 +2,8 @@
 
 import sqlite3
 
-db_conn = None
-
 # Create or connect to the SQLite database and set up the schema
 def initialize_database(player_table_init: str, kills_log_table_init: str, db_name="game_log.db"):
-    global db_conn
     db_conn = sqlite3.connect(db_name, check_same_thread=False)
     cursor = db_conn.cursor()
 
@@ -16,9 +13,10 @@ def initialize_database(player_table_init: str, kills_log_table_init: str, db_na
     cursor.execute(kills_log_table_init)
 
     db_conn.commit()
+    return db_conn
 
 # Get player ID by name, create player if they don't exist
-def get_or_create_player(player_name):
+def get_or_create_player(db_conn, player_name):
     cursor = db_conn.cursor()
     cursor.execute("SELECT id FROM players WHERE name = ?", (player_name,))
     row = cursor.fetchone()
@@ -31,29 +29,29 @@ def get_or_create_player(player_name):
         return cursor.lastrowid
 
 
-def query_stat(column: str, player_id):
+def query_stat(db_conn, column: str, player_id):
     cursor = db_conn.cursor()
     # query existing time
     cursor.execute(f"SELECT {column} FROM players WHERE id = ?", (player_id,))
     return cursor.fetchone()
 
-def exec_query(query: str, params: tuple = ()):
+def exec_query(db_conn, query: str, params: tuple = ()):
     cursor = db_conn.cursor()
     cursor.execute(query, params)
     db_conn.commit()
 
 # TODO: use query_stat() instead
-def get_player_name_by_id(player_id):
+def get_player_name_by_id(db_conn, player_id):
     cursor = db_conn.cursor()
     cursor.execute("SELECT name FROM players WHERE id = ?", (player_id,))
     result = cursor.fetchone()
     return result[0] if result else None
 
-def set_stat(player_id, column, value):
+def set_stat(db_conn, player_id, column, value):
     exec_query(f"UPDATE players SET {column} = ? WHERE id = ?", (value, player_id))
 
 # BUG TODO: merge function is broken for fastcap and will trample the player's scores
-def merge_players(source_id, target_id):
+def merge_players(db_conn, source_id, target_id):
     cursor = db_conn.cursor()
 
     # Update all references of source_id in kills_log to target_id
@@ -73,7 +71,7 @@ def merge_players(source_id, target_id):
 
     db_conn.commit()
 
-def whois(player_name):
+def whois(db_conn, player_name):
     cursor = db_conn.cursor()
     cursor.execute("SELECT id, name FROM players")
     players = cursor.fetchall()
@@ -90,7 +88,7 @@ def whois(player_name):
         return -1
     return closest_match_id
 
-def close_db():
+def close_db(db_conn):
     db_conn.close()
 
 ############# testing. comment this out when using shazbot.py instead ##################

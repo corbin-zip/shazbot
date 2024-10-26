@@ -262,7 +262,7 @@ EVENT_PATTERNS = {
 
 
 
-def handle_stat_event(event_type, data):
+def handle_stat_event(db_conn, event_type, data):
     # strip any leading or trailing spaces, which seems to happen occasionally in the IRC output
     # TODO: might not be necessary if we just fix the regex's to match 1 or more spaces after the time :)
     if 'player' in data and data['player'] is not None:
@@ -273,19 +273,19 @@ def handle_stat_event(event_type, data):
     # player kills player
     # +1 kill to killer, +1 death to victim, log it
     if event_type in ["demolished", "smoked", "took_out", "eliminated", "shot_down", "bombed", "mowed_down", "finished_off", "defeated", "fed_plasma", "blasted", "turret_stopped", "gunned_down", "tripped_mine", "detonated"]:
-        killer_id = shaz_db.get_or_create_player(player_name)
-        victim_id = shaz_db.get_or_create_player(target_name)
-        increment_player_stat(killer_id, "total_kills")
-        increment_player_stat(victim_id, "total_deaths")
-        log_kill_event(killer_id, victim_id, event_type)
+        killer_id = shaz_db.get_or_create_player(db_conn, player_name)
+        victim_id = shaz_db.get_or_create_player(db_conn, target_name)
+        increment_player_stat(db_conn, killer_id, "total_kills")
+        increment_player_stat(db_conn, victim_id, "total_deaths")
+        log_kill_event(db_conn, killer_id, victim_id, event_type)
 
     # clocks
     elif event_type in ["left_player_clock", "right_player_clock", "two_player_clock"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, "clocks")
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, "clocks")
         if event_type == "two_player_clock":
-            player2_id = shaz_db.get_or_create_player(target_name)
-            increment_player_stat(player2_id, "clocks")
+            player2_id = shaz_db.get_or_create_player(db_conn, target_name)
+            increment_player_stat(db_conn, player2_id, "clocks")
 
 
     # special handlers for death by turret
@@ -295,98 +295,98 @@ def handle_stat_event(event_type, data):
     # TODO: after i fixed the space issue in parse_single_stat, i need to check if this is even a problem anymore
     elif event_type in ["fried", "shot_down", "nailed"]:
         if player_name == "A plasma turret":
-            player_id = shaz_db.get_or_create_player(target_name)
-            increment_player_stat(player_id, "plasma_turret_fried")
-            increment_player_stat(player_id, "total_deaths")
+            player_id = shaz_db.get_or_create_player(db_conn, target_name)
+            increment_player_stat(db_conn, player_id, "plasma_turret_fried")
+            increment_player_stat(db_conn, player_id, "total_deaths")
         elif player_name == "An AA turret":
-            player_id = shaz_db.get_or_create_player(target_name)
-            increment_player_stat(player_id, "aa_shot_down")
-            increment_player_stat(victim_id, "total_deaths")
+            player_id = shaz_db.get_or_create_player(db_conn, target_name)
+            increment_player_stat(db_conn, player_id, "aa_shot_down")
+            increment_player_stat(db_conn, victim_id, "total_deaths")
         elif player_name == "A sentry turret":
-            player_id = shaz_db.get_or_create_player(target_name)
-            increment_player_stat(player_id, "sentry_turret_nailed")
-            increment_player_stat(player_id, "total_deaths")
+            player_id = shaz_db.get_or_create_player(db_conn, target_name)
+            increment_player_stat(db_conn, player_id, "sentry_turret_nailed")
+            increment_player_stat(db_conn, player_id, "total_deaths")
         else:
-            killer_id = shaz_db.get_or_create_player(player_name)
-            victim_id = shaz_db.get_or_create_player(target_name)
-            increment_player_stat(killer_id, "total_kills")
-            increment_player_stat(victim_id, "total_deaths")
-            log_kill_event(killer_id, victim_id, event_type)
+            killer_id = shaz_db.get_or_create_player(db_conn, player_name)
+            victim_id = shaz_db.get_or_create_player(db_conn, target_name)
+            increment_player_stat(db_conn, killer_id, "total_kills")
+            increment_player_stat(db_conn, victim_id, "total_deaths")
+            log_kill_event(db_conn, killer_id, victim_id, event_type)
     
     # normal handlers for death by turret etc
     # +1 death, +1 relevant stat
     elif event_type in ["got_shot_down", "plasma_turret_fried", "aa_shot_down", "remote_turret_got", "mortar_turret_got", "caught_mortar_shell", "sentry_turret_nailed", "aa_shot_down"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, "total_deaths")
-        increment_player_stat(player_id, event_type)
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, "total_deaths")
+        increment_player_stat(db_conn, player_id, event_type)
 
     # teamkilling
     # +1 teamkill to killer, +1 death to victim, log it
     elif event_type == "teamkilled":
-        killer_id = shaz_db.get_or_create_player(player_name)
-        victim_id = shaz_db.get_or_create_player(target_name)
-        increment_player_stat(killer_id, "teamkills")
-        increment_player_stat(victim_id, "total_deaths")
-        log_kill_event(killer_id, victim_id, event_type)
+        killer_id = shaz_db.get_or_create_player(db_conn, player_name)
+        victim_id = shaz_db.get_or_create_player(db_conn, target_name)
+        increment_player_stat(db_conn, killer_id, "teamkills")
+        increment_player_stat(db_conn, victim_id, "total_deaths")
+        log_kill_event(db_conn, killer_id, victim_id, event_type)
 
     # suicides
     # +1 death, +1 relevant stat
     elif event_type in ["suicided", "landed_too_hard", "needs_armor", "will_respawn_shortly", "killed_himself", "killed_herself", "tripped_his_own_mine", "tripped_her_own_mine", "became_spare_parts"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, event_type)
-        increment_player_stat(player_id, "total_deaths")
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, event_type)
+        increment_player_stat(db_conn, player_id, "total_deaths")
 
     # flag captures
     # +1 flags_captured
     # TODO: do we want to count storm vs inferno, for example?
     elif event_type in ["captured_flag"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, "flags_captured")
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, "flags_captured")
     
     # flag returns
     # +1 flags_returned
     # TODO: do we want to count storm vs inferno, or example?
     elif event_type in ["returned_flag", "returned_storm_flag", "returned_inferno_flag"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, "flags_returned")
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, "flags_returned")
 
     # capture n hold
     elif event_type in ["cnh_captured_objective", "cnh_defended_objective"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, event_type)
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, event_type)
 
     # repairs
     elif event_type in ["repaired_turret", "repaired_generator", "repaired_inventory_station", "repaired_vehicle_station", "repaired_sensor"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, event_type)
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, event_type)
 
     # defended
     elif event_type in ["defended_generator", "defended_flag", "defended_flag_carrier"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, event_type)
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, event_type)
 
     # deployed remote
     elif event_type in ["deployed_remote_station", "deployed_remote_turret", "deployed_remote_sensor"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, event_type)
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, event_type)
 
     # disabled team's stuff (naughty!!)
     elif event_type in ["disabled_team_remote_station", "disabled_team_remote_turret", "disabled_team_remote_sensor", "disabled_team_turret", "disabled_team_generator"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, event_type)
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, event_type)
 
     # destroyed enemy base stuff
     elif event_type in ["destroyed_enemy_vehicle_station", "destroyed_enemy_turret", "destroyed_enemy_remote_turret", "destroyed_enemy_remote_sensor", "demolished_turret", "destroyed_enemy_remote_station", "destroyed_enemy_inventory_station", "destroyed_enemy_generator", "destroyed_enemy_sensor"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, event_type)
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, event_type)
     
     # destroyed enemy vehicle
     elif event_type in ["destroyed_enemy_fighter", "destroyed_enemy_bomber", "destroyed_enemy_transport", "destroyed_enemy_grav_cycle"]:
-        player_id = shaz_db.get_or_create_player(player_name)
-        increment_player_stat(player_id, event_type)
+        player_id = shaz_db.get_or_create_player(db_conn, player_name)
+        increment_player_stat(db_conn, player_id, event_type)
 
 
-def parse_single_stat(line, log_file="unmatched_stat_events.log"):
+def parse_single_stat(db_conn, line, log_file="unmatched_stat_events.log"):
     # if there are 2 spaces between the time and the line, remove 1 of them
     # TODO: maybe remove this and just fix the regex's instead :)
     fixed_line = re.sub(r"(\[\d{2}:\d{2}\])\s{2}", r"\1 ", line)
@@ -394,18 +394,19 @@ def parse_single_stat(line, log_file="unmatched_stat_events.log"):
     for event, pattern in EVENT_PATTERNS.items():
         match = re.match(pattern, fixed_line)
         if match:
-            handle_stat_event(event, match.groupdict())
+            handle_stat_event(db_conn, event, match.groupdict())
         else:
             if re.match(r"^\[\d{2}:\d{2}\]", line):
                 with open(log_file, "a") as file:
                     file.write(f"{line}\n")
 
-def increment_player_stat(player_id, stat_column):
-    shaz_db.exec_query(f"UPDATE players SET {stat_column} = {stat_column} + 1 WHERE id = ?", (player_id,))
+def increment_player_stat(db_conn, player_id, stat_column):
+    shaz_db.exec_query(db_conn, f"UPDATE players SET {stat_column} = {stat_column} + 1 WHERE id = ?", (player_id,))
 
 # Log kill events (including tripping mines, team kills, etc.)
-def log_kill_event(killer_id, victim_id, event_type):
-    exec_query("""
+def log_kill_event(db_conn, killer_id, victim_id, event_type):
+    exec_query(db_conn, 
+    """
     INSERT INTO kills_log (killer_id, victim_id, event_type)
     VALUES (?, ?, ?)
     """, (killer_id, victim_id, event_type))

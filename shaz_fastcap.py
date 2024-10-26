@@ -16,7 +16,7 @@ def extract_time_remaining(line):
     return None
 
 # TODO: consider extracting time from regex instead of passing it around
-def handle_cap_event(event_type, data, current_time):
+def handle_cap_event(db_conn, event_type, data, current_time):
     print(f"DEBUG: Event Type: {event_type}, Data: {data}, Current Time: {current_time}")
 
     # TODO: might not be necessary if we just fix the regex's to match 1 or more spaces after the time :)
@@ -77,13 +77,13 @@ def handle_cap_event(event_type, data, current_time):
         if current_map is not None:
             if team_name == "Storm" and storm_last_grab_name == player_name:
                 cap_time = storm_last_grab_time_remaining - current_time
-                cap_update = record_cap_time(storm_last_grab_name, current_map, team_name, cap_time)
+                cap_update = record_cap_time(db_conn, storm_last_grab_name, current_map, team_name, cap_time)
                 storm_last_grab_time_remaining = 3600
                 storm_last_grab_name = None
                 return cap_update
             elif team_name == "Inferno" and inferno_last_grab_name == player_name:
                 cap_time = inferno_last_grab_time_remaining - current_time
-                cap_update = record_cap_time(inferno_last_grab_name, current_map, team_name, cap_time)
+                cap_update = record_cap_time(db_conn, inferno_last_grab_name, current_map, team_name, cap_time)
                 inferno_last_grab_time_remaining = 3600
                 inferno_last_grab_name = None
                 return cap_update
@@ -106,7 +106,7 @@ def handle_cap_event(event_type, data, current_time):
             inferno_last_grab_time_remaining = 3600
     return None
 
-def parse_single_cap(line, log_file="unmatched_cap_events.log"):
+def parse_single_cap(db_conn, line, log_file="unmatched_cap_events.log"):
     # TODO: instead of "fixing" the line, i believe we can just fix the regex's to match up to 2 spaces
     fixed_line = re.sub(r"(\[\d{2}:\d{2}\])\s{2}", r"\1 ", line)
     current_time = extract_time_remaining(fixed_line)
@@ -115,7 +115,7 @@ def parse_single_cap(line, log_file="unmatched_cap_events.log"):
         for event, pattern in shaz_stats.EVENT_PATTERNS.items():
             match = re.match(pattern, fixed_line)
             if match:
-                cap_update = handle_cap_event(event, match.groupdict(), current_time)
+                cap_update = handle_cap_event(db_conn, event, match.groupdict(), current_time)
                 return cap_update
     
     if re.match(r"^\[\d{2}:\d{2}\]", line):
@@ -144,7 +144,7 @@ MAP_NAME_TO_COLUMN = {
     "Tombstone": "best_cap_tombstone"
 }
 
-def record_cap_time(player_name, map_name, flag_team, cap_time):
+def record_cap_time(db_conn, player_name, map_name, flag_team, cap_time):
     return_string = None
     column = MAP_NAME_TO_COLUMN.get(map_name)
     
@@ -163,18 +163,18 @@ def record_cap_time(player_name, map_name, flag_team, cap_time):
 
     column = column + "_" + team_name.lower()
 
-    player_id = shaz_db.get_or_create_player(player_name)
+    player_id = shaz_db.get_or_create_player(db_conn, player_name)
 
     assert player_id is not None, f"Error: failed to lookup or create player '{player_name}'"
     
     # query existing time
-    current_best = shaz_db.query_stat(column, player_id)
+    current_best = shaz_db.query_stat(db_conn, column, player_id)
 
     assert current_best is not None, f"Error: no record found for player {player_name} on map {map_name} ({team_name})"
 
     # compare existing time to new time
     if cap_time < current_best[0]:
-        shaz_db.set_stat(player_id=player_id, column=column, value=cap_time)
+        shaz_db.set_stat(db_conn, player_id=player_id, column=column, value=cap_time)
         print(f"Updated {player_name}'s {map_name} ({team_name}) best cap time to {cap_time}.")
         return_string = f":) {player_name} (id {player_id}) set a new personal best on {map_name} ({team_name}) of {cap_time}s!"
     elif cap_time == current_best[0]:

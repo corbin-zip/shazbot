@@ -75,16 +75,13 @@
     - (players can no longer [Majin Buu](https://www.youtube.com/watch?v=v3W2Y2NKIhE) (or [Walter White](https://old.reddit.com/r/breakingbad/comments/2dik2v/spoilera_little_detail_i_noticed_in_season_5/)) absorb stats from others so this is no longer marked as a bug :)
 * break `shazbot.py` into separate files, similar to how `shaz_db.py` was broken up
     * would be nice to have the commands themselves in a different file for instance
+* specify session directory in `.env` to store session database files (eg something like `path join(directory_from_env, db_filename)`)
 
 ### to be considered
 * think about tracking wins & losses
     - the last time I put much thought into this, it actually seemed rather difficult to do purely from an IRC perspective
     - ...but it's a more trivial problem if we have access to static logs
     - it seems like it could create more problems than it's worth if we track wins/losses *sometimes* but not other times, is the thing
-* think about tracking some events separately
-    - it would be really cool to say something like `!track #__SUNDAY 'Sunday Event 10-20-24'` and then when the event is over, `!untrack`, and then you could browse stats and the kill log from that specific event
-    - really need to think about the best way to do this. a separate database for each event may make the most sense? maybe? but then giving totals could become cumbersome, since there are a *lot* of events throughout the year
-    - there is probably a simple solution to this that I just haven't considered yet!
 * think about how `current_time` is used for fastcap stuff
     - currently it's being passed around as an argument
     - should it be pulled out of `data` via regex instead?

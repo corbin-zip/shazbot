@@ -8,6 +8,7 @@ import re
 import shaz_db
 import shaz_stats
 import shaz_fastcap
+import shaz_sessions
 from dotenv import load_dotenv
 import os
 
@@ -39,7 +40,7 @@ irc_watch_channel = None
 discord_tv_channel = int(os.getenv("SHAZ_DEFAULT_DISCORD_TV"))
 
 ## tracking ...
-track_channel_list = []
+tracked_channel_list = []
 
 ##fastcap
 currently_fastcapping = False
@@ -49,9 +50,11 @@ discord_fastcap_channel = int(os.getenv("SHAZ_DEFAULT_DISCORD_FASTCAP"))
 # db
 #TODO: consider that initialize_database() should accept either a variable number of arguments, or a list of queries to execute, to make it more modular
 #      this is a cool idea in theory, but there would be a fair amount of extra work involved in practice methinks...
-DB_NAME = os.getenv("SHAZ_DB_NAME", "game_log.db")
-db_conn = shaz_db.initialize_database(player_table_init=shaz_stats.PLAYER_TABLE_INIT, kills_log_table_init=shaz_stats.KILLS_LOG_TABLE_INIT, db_name=DB_NAME)
-db_lock = asyncio.Lock()
+MASTER_DB_NAME = os.getenv("SHAZ_DB_NAME", "game_log.db")
+master_db_conn = shaz_db.initialize_database(player_table_init=shaz_stats.PLAYER_TABLE_INIT, kills_log_table_init=shaz_stats.KILLS_LOG_TABLE_INIT, db_name=MASTER_DB_NAME)
+master_db_lock = asyncio.Lock()
+
+message_order_lock = asyncio.Lock()
 
 # IRC ------------------------------------------------------------------------------------------
 class MyIRCBot(pydle.Client):
@@ -122,25 +125,39 @@ class MyIRCBot(pydle.Client):
         global currently_fastcapping, irc_fastcap_channel, discord_fastcap_channel
         if currently_fastcapping and target == irc_fastcap_channel:
             # print("DEBUG: calling parse_single_cap...")
-            async with db_lock:
+            async with master_db_lock:
                 loop = asyncio.get_event_loop()
-                fc_result = await loop.run_in_executor(None, shaz_fastcap.parse_single_cap, db_conn, cleaned_message)
+                fc_result = await loop.run_in_executor(None, shaz_fastcap.parse_single_cap, master_db_conn, cleaned_message)
                 if fc_result:
                     await send_message_to_channel(discord_fastcap_channel, "`" + fc_result + "`")
 
-        global currently_watching, irc_watch_channel, discord_tv_channel, track_channel_list
+        global currently_watching, irc_watch_channel, discord_tv_channel, tracked_channel_list
 
-        if target in track_channel_list:
-            # (alternatively could refactor shaz_db to be async as well)
-            async with db_lock:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, shaz_stats.parse_single_stat, db_conn, cleaned_message)
-                if currently_watching and target == irc_watch_channel:
-                    await send_message_to_channel(discord_tv_channel, "`" + cleaned_message + "`")
+        session_tracking, session_db_conn, session_lock = shaz_sessions.is_channel_in_session_list(target)
+
+
+        # parse to master db if it's either being tracked or has an associated session
+        should_parse_for_master_db = False
+
+        if session_tracking:
+            async with session_lock:
+                shaz_stats.parse_single_stat(session_db_conn, cleaned_message)
+            should_parse_for_master_db = True
         else:
-            #this is in two places because the messages will send out of order if it isn't
-            if currently_watching and target == irc_watch_channel:
-                await send_message_to_channel(discord_tv_channel, "`" + cleaned_message + "`")
+            if target in tracked_channel_list:
+                should_parse_for_master_db = True
+
+        # i think this makes sense here instead of copy/pasting above
+        if should_parse_for_master_db:
+            async with master_db_lock:
+                shaz_stats.parse_single_stat(master_db_conn, cleaned_message)
+
+        # mirror messages to discord if currently watching
+        if currently_watching and target == irc_watch_channel:
+            # to ensure messages are sent in order
+            # TODO: look at something like an async queue?
+            async with message_order_lock:
+                await send_message_to_channel(discord_tv_channel, f"`{cleaned_message}`")    
 
 
 # ------------------------------------------------------------------------
@@ -171,6 +188,7 @@ async def get_discord_id(ctx):
     await ctx.send(f"Your user ID is: {ctx.author.id}")
 
 @discord_bot.command(name='op')
+@is_admin_or_operator()
 async def add_operator(ctx, user_id: int):
     if ctx.author.id in ADMIN_USERS:
         operators.add(user_id)
@@ -179,9 +197,35 @@ async def add_operator(ctx, user_id: int):
         await ctx.send("You don't have permission to add operators")
 
 @discord_bot.command()
+@is_admin_or_operator()
 async def hello(ctx):
     """Responds with 'Hello!' when the command !hello is used."""
     await ctx.send('Hello!')
+
+@discord_bot.command()
+@is_admin_or_operator()
+async def create_session(ctx, name: str, channel: str):
+    """Creates a new session with the given name and channel."""
+    try:
+        shaz_sessions.create_session(name, channel)
+        await ctx.send(f"Session '{name}' created for channel '{channel}'.")
+    except Exception as e:
+        await ctx.send(f"Failed to create session: {e}")
+
+@discord_bot.command()
+@is_admin_or_operator()
+async def list_sessions(ctx):
+    await ctx.send(shaz_sessions.list_sessions())
+
+@discord_bot.command()
+@is_admin_or_operator()
+async def end_session(ctx, channel: str):
+    """Ends the session associated with the given channel."""
+    success = shaz_sessions.end_session(channel)
+    if success:
+        await ctx.send(f"Session for channel '{channel}' has been ended.")
+    else:
+        await ctx.send(f"No session found for channel '{channel}'.")
 
 @discord_bot.command(name='list')
 @is_admin_or_operator()
@@ -252,10 +296,10 @@ async def track_list(ctx):
     """
     Lists all currently tracked IRC channels.
     """
-    if not track_channel_list:
+    if not tracked_channel_list:
         await ctx.send("No channels are currently being tracked.")
     else:
-        tracked_channels = "\n".join(track_channel_list)
+        tracked_channels = "\n".join(tracked_channel_list)
         await ctx.send(f"Currently tracked channels:\n{tracked_channels}")
 
 @discord_bot.command()
@@ -264,15 +308,15 @@ async def stop_track(ctx, channel_name: str):
     """
     Stops tracking a specified IRC channel.
     """
-    global track_channel_list
+    global tracked_channel_list
 
     normalized_channel = f"#{channel_name.lstrip('#')}"
 
-    if normalized_channel not in track_channel_list:
+    if normalized_channel not in tracked_channel_list:
         await ctx.send(f"Channel {normalized_channel} is not being tracked.")
         return
 
-    track_channel_list.remove(normalized_channel)
+    tracked_channel_list.remove(normalized_channel)
     if irc_bot and irc_bot.connected:
         await irc_bot.part(normalized_channel)
         await ctx.send(f"Stopped tracking IRC channel: {normalized_channel}")
@@ -291,17 +335,17 @@ async def track(ctx, channel_name: str):
         ctx: The context of the command.
         channel_name (str): The name of the IRC channel to track (e.g., #channelname or channelname).
     """
-    global track_channel_list
+    global tracked_channel_list
 
     normalized_channel = f"#{channel_name.lstrip('#')}"
 
-    if normalized_channel in track_channel_list:
+    if normalized_channel in tracked_channel_list:
         await ctx.send(f"Already tracking IRC channel: {normalized_channel}")
         return
 
     if irc_bot and irc_bot.connected:
         print(f"let's begin tracking {normalized_channel}!")
-        track_channel_list.append(normalized_channel)
+        tracked_channel_list.append(normalized_channel)
 
         #BUG: if the bot is already in the channel (eg: fastcapping), it won't
         #     give any indication that the !track command was successful
@@ -405,28 +449,28 @@ async def unwatch(ctx):
 @discord_bot.command(name='close')
 @is_admin_or_operator()
 async def close_db(ctx):
-    shaz_db.close_db(db_conn)
+    shaz_db.close_db(master_db_conn)
     await ctx.send("Closed database connection.")
 
 #BUG TODO: this currently tramples the player's fastcap scores
 @discord_bot.command(name='merge')
 @is_admin_or_operator()
 async def merge_players(ctx, source_id: int, target_id: int):
-    source_name = shaz_db.get_player_name_by_id(db_conn, source_id)
-    target_name = shaz_db.get_player_name_by_id(db_conn, target_id)
+    source_name = shaz_db.get_player_name_by_id(master_db_conn, source_id)
+    target_name = shaz_db.get_player_name_by_id(master_db_conn, target_id)
     if (source_name is None) or (target_name is None):
         await ctx.send("Sorry, one of those player IDs doesn't exist")
     else:
-        shaz_db.merge_players(db_conn, source_id, target_id)
+        shaz_db.merge_players(master_db_conn, source_id, target_id)
         await ctx.send(f"Merged player ID {source_id} ({source_name}) into ID {target_id} ({target_name}).")
 
 @discord_bot.command(name='whois')
 @is_admin_or_operator()
 async def whois_player(ctx, player_name: str):
-    player_id = shaz_db.whois(db_conn, player_name)
+    player_id = shaz_db.whois(master_db_conn, player_name)
     response = f"No player found with a name similar to '{player_name}'."
     if player_id > 0:
-        found_name = shaz_db.get_player_name_by_id(db_conn, player_id)
+        found_name = shaz_db.get_player_name_by_id(master_db_conn, player_id)
         response = f"Closest match is player ID {player_id} ({found_name})."
     await ctx.send(response)
 

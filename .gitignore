@@ -1,5 +1,5 @@
 .env
-game_log.db
+*.db
 unmatched_cap_events.log
 unmatched_stat_events.log
 sample_logs/

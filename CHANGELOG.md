@@ -5,6 +5,7 @@
 * `!watch` no longer tracks
 * add `!track` and other tracking-related commands
 * allow for tracking of multiple channels
+* add sessions feature, allowing stats to be tracked into a separate db
 
 ### 10/24/24
 * refactor; separate out stat tracking & fastcapping from db
